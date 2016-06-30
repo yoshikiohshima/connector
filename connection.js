@@ -12,13 +12,24 @@ var ports = {};  // port -> path
 
 var daemons = {};
 
-var id = 0;
-
+var id = Number.MIN_SAFE_INTEGER;
 function nextId() {
   return id++;
 }
 
 var closing = /closing control connection/;
+
+function basePath(path) {
+  var ary = path.split('/');
+  return '/' + ary[1];
+};
+
+function restPath(path) {
+  var ary = path.split('/');
+  ary.shift();
+  ary.shift();
+  return '/' + ary.join('/');
+};
 
 function findPortsForPath(path) {
   var cPort = null;
@@ -42,17 +53,18 @@ function findPortsForPath(path) {
 function forward(req, res) {
   console.log('forward');
   var path = req.url;
-  var ports = paths[path];
+  var ports = paths[basePath(path)];
   console.log(path, ports);
   if (!ports) {
+    var message = 'Cannot Connect';
+    console.log(message);
     res.writeHead(404, {
-     'Content-Length': 5,
+     'Content-Length': message.length,
      'Content-Type': 'text/plain' });
-    res.write('abcde');
-    res.end();
+    res.end(message);
     return;
   }
-  var url = 'http://localhost:' + ports[1];
+  var url = 'http://localhost:' + ports[1] + restPath(path);
   var req = http.request(url, function(res1) {
     var headers = res1.headers;
     res.writeHead(res1.statusCode, headers);
@@ -81,7 +93,9 @@ app.get('/', function(req, res) {
       if (!firstTime) {
         firstTime = true;
         res.send('ack: ' + newPorts[0]);
-        app.get(path, forward);
+        app.all(path, forward);
+        app.all(path + '/*', forward);
+        console.log(app._router);
       }
       if (closing.test(data)) {
         console.log('control connection closed for ', daemons[daemon.myid]);
